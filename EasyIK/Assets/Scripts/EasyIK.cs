@@ -13,7 +13,7 @@ public class EasyIK : MonoBehaviour
     public float tolerance = 0.05f;
     private Transform[] jointTransforms;
     private Vector3 startPosition;
-    private Vector3[] jointPositions;
+    [SerializeField] private Vector3[] jointPositions;
     private float[] boneLength;
     private float jointChainLength;
     private float distanceToTarget;
@@ -34,6 +34,7 @@ public class EasyIK : MonoBehaviour
     public float gizmoSize = 0.05f;
     public bool poleDirection = false;
     public bool poleRotationAxis = false;
+    [SerializeField] private float boneLengthModifier = 1f;
 
     void Awake()
     {
@@ -112,7 +113,7 @@ public class EasyIK : MonoBehaviour
             }
             else
             {
-                jointPositions[i] = jointPositions[i + 1] + (jointPositions[i] - jointPositions[i + 1]).normalized * boneLength[i];
+                jointPositions[i] = jointPositions[i + 1] + (jointPositions[i] - jointPositions[i + 1]).normalized * (boneLength[i] * boneLengthModifier);
             }
         }
     }
@@ -129,7 +130,7 @@ public class EasyIK : MonoBehaviour
             }
             else
             {
-                jointPositions[i] = jointPositions[i - 1] + (jointPositions[i] - jointPositions[i - 1]).normalized * boneLength[i - 1];
+                jointPositions[i] = jointPositions[i - 1] + (jointPositions[i] - jointPositions[i - 1]).normalized * (boneLength[i - 1] * boneLengthModifier);
             }
         }
     }
@@ -145,7 +146,7 @@ public class EasyIK : MonoBehaviour
         distanceToTarget = Vector3.Distance(jointPositions[0], ikTarget.position);
 
         // IF THE TARGET IS NOT REACHABLE
-        if (distanceToTarget > jointChainLength)
+        if (distanceToTarget > jointChainLength * boneLengthModifier)
         {
             // Direction from root to ikTarget
             var direction = ikTarget.position - jointPositions[0];
@@ -153,7 +154,7 @@ public class EasyIK : MonoBehaviour
             // Get the jointPositions
             for (int i = 1; i < jointPositions.Length; i += 1)
             {
-                jointPositions[i] = jointPositions[i - 1] + direction.normalized * boneLength[i - 1];
+                jointPositions[i] = jointPositions[i - 1] + direction.normalized * (boneLength[i - 1] * boneLengthModifier);
             }
         }
         // IF THE TARGET IS REACHABLE
@@ -180,11 +181,21 @@ public class EasyIK : MonoBehaviour
         PoleConstraint();
 
         // Apply the jointPositions and rotations to the joints
-        for (int i = 0; i < jointPositions.Length - 1; i += 1)
+        for (int i = 0; i < jointPositions.Length; i += 1)
         {
             jointTransforms[i].position = jointPositions[i];
-            var targetRotation = Quaternion.FromToRotation(jointStartDirection[i], jointPositions[i + 1] - jointPositions[i]);
-            jointTransforms[i].rotation = targetRotation * startRotation[i];
+
+            
+            if (i == jointPositions.Length - 1)
+            {
+                var targetRotation = Quaternion.FromToRotation(jointStartDirection[i], jointPositions[i] - jointPositions[i - 1]);
+                jointTransforms[i].rotation = targetRotation * startRotation[i];
+            }
+            else
+            {
+                var targetRotation = Quaternion.FromToRotation(jointStartDirection[i], jointPositions[i + 1] - jointPositions[i]);
+                jointTransforms[i].rotation = targetRotation * startRotation[i];
+            }
         }
         // Let's constrain the rotation of the last joint to the IK target and maintain the offset.
         Quaternion offset = lastJointStartRot * Quaternion.Inverse(ikTargetStartRot);
@@ -217,7 +228,8 @@ public class EasyIK : MonoBehaviour
                     var length = Vector3.Distance(current.position, child.position);
                     DrawWireCapsule(current.position + (child.position - current.position).normalized * length / 2, Quaternion.FromToRotation(Vector3.up, (child.position - current.position).normalized), gizmoSize, length, Color.cyan);
                     current = current.GetChild(0);
-                    child = current.GetChild(0);
+                    if (current.childCount > 0)
+                        child = current.GetChild(0);
                 }
             }
         }
